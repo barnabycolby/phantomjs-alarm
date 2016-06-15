@@ -29,21 +29,55 @@ alreadyDownloaded() {
     fi
 }
 
-# If not, download and extract it
-# Make it publicly available
-
+# The version to download from Arch Linux ARM should be passed as the first argument
+# The version to create should be passed as the second argument
+# Note that these values may differ if the Arch Linux ARM packages have been patched
 download() {
-    wget 'http://mirror.archlinuxarm.org/armv7h/community/phantomjs-2.1.1-3-armv7h.pkg.tar.xz'
-    mkdir tmp
-    tar -xvJf phantomjs-2.1.1-3-armv7h.pkg.tar.xz -C tmp
-    cp tmp/usr/bin/phantomjs phantomjs-2.1.1-3-armv7h
-    rm -r tmp
-    rm phantomjs-2.1.1-3-armv7h.pkg.tar.xz
+    alarmVersion=$1
+    version=$2
+
+    # Create the required directories
+    local tmp="$(mktemp -d)"
+    local alarmDirPath="${tmp}/alarm"
+    local outputDir="phantomjs-${version}-linux-armv7h"
+    local outputDirPath="${tmp}/${outputDir}"
+    local bitbucketDirPath="${tmp}/bitbucket"
+    mkdir $alarmDirPath
+    mkdir $outputDirPath
+    mkdir $bitbucketDirPath
+
+    # Download and extract the Arch Linux ARM package
+    local pkgFilename="phantomjs-${alarmVersion}-armv7h.pkg.tar.xz"
+    wget "http://mirror.archlinuxarm.org/armv7h/community/${pkgFilename}" -O ${tmp}/${pkgFilename}
+    tar xvJf ${tmp}/${pkgFilename} -C $alarmDirPath
+
+    # Download and extract the bitbucket package (for the changelog and readme)
+    bitbucketFilenameNoExtension="phantomjs-${version}-linux-x86_64"
+    bitbucketFilename="${bitbucketFilenameNoExtension}.tar.bz2"
+    wget "https://bitbucket.org/ariya/phantomjs/downloads/${bitbucketFilename}" -O ${tmp}/${bitbucketFilename}
+    tar xvjf ${tmp}/${bitbucketFilename} -C ${bitbucketDirPath}
+
+    # Construct the phantomjs output folder
+    cp -r ${alarmDirPath}/usr/bin ${outputDirPath}/
+    cp -r ${alarmDirPath}/usr/share/phantomjs/examples ${outputDirPath}/
+    cp -r ${alarmDirPath}/usr/share/licenses/phantomjs/* ${outputDirPath}/
+    cp ${bitbucketDirPath}/${bitbucketFilenameNoExtension}/README.md ${outputDirPath}/
+    cp ${bitbucketDirPath}/${bitbucketFilenameNoExtension}/ChangeLog ${outputDirPath}/
+
+    # Compress the output folder
+    local outputFile="${tmp}/${outputDir}.tar.bz2"
+    tar cvjf ${outputFile} --directory=${tmp} ${outputDir}
+
+    # Move the output archive to the appropriate location
+    mv ${outputFile} ${downloadLocation}
+
+    rm -r $tmp
 }
 
 echo -n "Finding the latest version of phantomjs available..."
 # tr -d removes all whitespace, in particular, this is used to remove the leading newline added by echo
-latestVersion="$(printLatestVersion | tr -d '[[:space:]]')"
+latestAlarmVersion="$(printLatestVersion | tr -d '[[:space:]]')"
+latestVersion="$(echo ${latestAlarmVersion} | sed -e 's/-.*//')"
 echo "Done."
 
 echo -n "Checking to see whether the latest version has already been downloaded..."
@@ -53,3 +87,9 @@ if alreadyDownloaded "$latestVersion"; then
     exit 2
 fi
 echo "Done."
+
+echo -n "Downloading latest version..."
+download "$latestAlarmVersion" "$latestVersion"
+echo "Done."
+
+exit 0
