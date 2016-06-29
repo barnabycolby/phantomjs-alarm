@@ -84,7 +84,9 @@ echo -n "Checking to see whether the latest version has already been downloaded.
 if alreadyDownloaded "$latestVersion"; then
     echo "Done."
     echo "The latest version of phantomjs ($latestVersion) has already been downloaded."
-    exit 2
+
+    # We exit with status 0 as this is still a successful execution
+    exit 0
 fi
 echo "Done."
 
