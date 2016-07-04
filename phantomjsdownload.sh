@@ -39,12 +39,14 @@ alreadyDownloaded() {
 download() {
     local architecture=$1
     local alarmVersion=$2
-    local version=$3
+
+    # Strips the extra alarm versioning if it exists
+    local version="$(echo ${latestAlarmVersion} | sed -e 's/-.*//')"
 
     # Create the required directories
     local tmp="$(mktemp -d)"
     local alarmDirPath="${tmp}/alarm"
-    local outputDir="phantomjs-${version}-linux-${architecture}"
+    local outputDir="phantomjs-${alarmVersion}-linux-${architecture}"
     local outputDirPath="${tmp}/${outputDir}"
     local bitbucketDirPath="${tmp}/bitbucket"
     mkdir $alarmDirPath
@@ -70,11 +72,16 @@ download() {
     cp ${bitbucketDirPath}/${bitbucketFilenameNoExtension}/ChangeLog ${outputDirPath}/
 
     # Compress the output folder
-    local outputFile="${tmp}/${outputDir}.tar.bz2"
+    local outputArchive="${outputDir}.tar.bz2"
+    local outputFile="${tmp}/${outputArchive}"
     tar cvjf ${outputFile} --directory=${tmp} ${outputDir}
 
     # Move the output archive to the appropriate location
     mv ${outputFile} ${downloadLocation}
+
+    # Symbolically link the latest phantomjs version to the latest ALARM version
+    local outputFileNoAlarmVersioning="phantomjs-${version}-linux-${architecture}"
+    ln -s ${downloadLocation}/${outputArchive} ${downloadLocation}/${outputFileNoAlarmVersioning}
 
     rm -r $tmp
 }
@@ -87,18 +94,17 @@ downloadAndPackage() {
     echo -n "Finding the latest version of phantomjs available..."
     # tr -d removes all whitespace, in particular, this is used to remove the leading newline added by echo
     latestAlarmVersion="$(printLatestVersion ${architecture} | tr -d '[[:space:]]')"
-    latestVersion="$(echo ${latestAlarmVersion} | sed -e 's/-.*//')"
     echo "Done."
     echo "${latestAlarmVersion}"
 
     echo -n "Checking to see whether the latest version has already been downloaded..."
-    if alreadyDownloaded "${architecture}" "${latestVersion}"; then
+    if alreadyDownloaded "${architecture}" "${latestAlarmVersion}"; then
         echo "Done."
-        echo "The latest version of phantomjs ($latestVersion) has already been downloaded."
+        echo "The latest version of phantomjs ($latestAlarmVersion) has already been downloaded."
     else
         echo "Done."
         echo -n "Downloading latest version..."
-        download "${architecture}" "${latestAlarmVersion}" "${latestVersion}"
+        download "${architecture}" "${latestAlarmVersion}"
         echo "Done."
     fi
 }
