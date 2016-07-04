@@ -46,7 +46,7 @@ download() {
     # Create the required directories
     local tmp="$(mktemp -d)"
     local alarmDirPath="${tmp}/alarm"
-    local outputDir="phantomjs-${alarmVersion}-linux-${architecture}"
+    local outputDir="phantomjs-${version}-linux-${architecture}"
     local outputDirPath="${tmp}/${outputDir}"
     local bitbucketDirPath="${tmp}/bitbucket"
     mkdir $alarmDirPath
@@ -71,7 +71,7 @@ download() {
 
     # Compress the output folder
     local outputArchiveExtension="tar.bz2"
-    local outputArchive="${outputDir}.${outputArchiveExtension}"
+    local outputArchive="phantomjs-${alarmVersion}-linux-${architecture}.${outputArchiveExtension}"
     local outputFile="${tmp}/${outputArchive}"
     tar cvjf ${outputFile} --directory=${tmp} ${outputDir}
 
@@ -79,7 +79,7 @@ download() {
     mv ${outputFile} ${downloadLocation}
 
     # Symbolically link the latest phantomjs version to the latest ALARM version
-    local outputFileNoAlarmVersioning="phantomjs-${version}-linux-${architecture}.${outputArchiveExtension}"
+    local outputFileNoAlarmVersioning="${outputDir}.${outputArchiveExtension}"
     ln -sf ${downloadLocation}/${outputArchive} ${downloadLocation}/${outputFileNoAlarmVersioning}
 
     rm -r $tmp
