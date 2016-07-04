@@ -5,7 +5,8 @@ downloadLocation='/data/dist/phantomjs'
 
 # Prints the latest version of phantomjs available from archlinuxarm
 printLatestVersion() {
-    local version=$(curl 'http://mirror.archlinuxarm.org/armv7h/community/' -L -s | grep 'phantomjs-.*-armv7h.pkg.tar.xz<' | sed -e 's/^.*<a href="phantomjs-//' | sed -e 's/-armv7h.*$//')
+    local architecture=$1
+    local version=$(curl "http://mirror.archlinuxarm.org/${architecture}/community/" -L -s | grep "phantomjs-.*-${architecture}.pkg.tar.xz<" | sed -e 's/^.*<a href="phantomjs-//' | sed -e "s/-${architecture}.*$//")
     
     # Check that the version number is valid
     versionRegex="^[0-9]+\.[0-9]+\.[0-9]+(\$|-[0-9]+)"
@@ -21,7 +22,10 @@ printLatestVersion() {
 # Check to see whether we already have it archived
 # Requires the version to check for as the first argument
 alreadyDownloaded() {
-    local filename="${downloadLocation}/phantomjs-${1}-linux-armv7h.tar.bz2"
+    local architecture=$1
+    local version=$2
+
+    local filename="${downloadLocation}/phantomjs-${version}-linux-${architecture}.tar.bz2"
     if [ -f $filename ]; then
         return 0
     else
@@ -33,13 +37,14 @@ alreadyDownloaded() {
 # The version to create should be passed as the second argument
 # Note that these values may differ if the Arch Linux ARM packages have been patched
 download() {
-    alarmVersion=$1
-    version=$2
+    local architecture=$1
+    local alarmVersion=$2
+    local version=$3
 
     # Create the required directories
     local tmp="$(mktemp -d)"
     local alarmDirPath="${tmp}/alarm"
-    local outputDir="phantomjs-${version}-linux-armv7h"
+    local outputDir="phantomjs-${version}-linux-${architecture}"
     local outputDirPath="${tmp}/${outputDir}"
     local bitbucketDirPath="${tmp}/bitbucket"
     mkdir $alarmDirPath
@@ -47,8 +52,8 @@ download() {
     mkdir $bitbucketDirPath
 
     # Download and extract the Arch Linux ARM package
-    local pkgFilename="phantomjs-${alarmVersion}-armv7h.pkg.tar.xz"
-    wget "http://mirror.archlinuxarm.org/armv7h/community/${pkgFilename}" -O ${tmp}/${pkgFilename}
+    local pkgFilename="phantomjs-${alarmVersion}-${architecture}.pkg.tar.xz"
+    wget "http://mirror.archlinuxarm.org/${architecture}/community/${pkgFilename}" -O ${tmp}/${pkgFilename}
     tar xvJf ${tmp}/${pkgFilename} -C $alarmDirPath
 
     # Download and extract the bitbucket package (for the changelog and readme)
@@ -74,24 +79,32 @@ download() {
     rm -r $tmp
 }
 
-echo -n "Finding the latest version of phantomjs available..."
-# tr -d removes all whitespace, in particular, this is used to remove the leading newline added by echo
-latestAlarmVersion="$(printLatestVersion | tr -d '[[:space:]]')"
-latestVersion="$(echo ${latestAlarmVersion} | sed -e 's/-.*//')"
-echo "Done."
+# If the latest version has not already been downloaded, it is downloaded and packaged for use
+# The architecture to download and package for should be given as the first argument (something like "armv7h")
+downloadAndPackage() {
+    local architecture=$1
 
-echo -n "Checking to see whether the latest version has already been downloaded..."
-if alreadyDownloaded "$latestVersion"; then
+    echo -n "Finding the latest version of phantomjs available..."
+    # tr -d removes all whitespace, in particular, this is used to remove the leading newline added by echo
+    latestAlarmVersion="$(printLatestVersion ${architecture} | tr -d '[[:space:]]')"
+    latestVersion="$(echo ${latestAlarmVersion} | sed -e 's/-.*//')"
     echo "Done."
-    echo "The latest version of phantomjs ($latestVersion) has already been downloaded."
+    echo "${latestAlarmVersion}"
 
-    # We exit with status 0 as this is still a successful execution
-    exit 0
-fi
-echo "Done."
+    echo -n "Checking to see whether the latest version has already been downloaded..."
+    if alreadyDownloaded "${architecture}" "${latestVersion}"; then
+        echo "Done."
+        echo "The latest version of phantomjs ($latestVersion) has already been downloaded."
+    else
+        echo "Done."
+        echo -n "Downloading latest version..."
+        download "${architecture}" "${latestAlarmVersion}" "${latestVersion}"
+        echo "Done."
+    fi
+}
 
-echo -n "Downloading latest version..."
-download "$latestAlarmVersion" "$latestVersion"
-echo "Done."
+for architecture in "aarch64" "arm" "armv6h" "armv7h"; do
+    downloadAndPackage "${architecture}"
+done
 
 exit 0
