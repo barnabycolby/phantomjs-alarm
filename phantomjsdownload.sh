@@ -12,7 +12,7 @@ printLatestVersion() {
     versionRegex="^[0-9]+\.[0-9]+\.[0-9]+(\$|-[0-9]+)"
     echo "$(echo "$version" | grep -Eq "$versionRegex")"
     if [ -z "$version" ] || ! echo "$version" | grep -Eq "$versionRegex" ;then
-        echo "The version number scraped from the ALARM mirror was invalid: $version"
+        echo "The version number scraped from the ALARM ${architecture} mirror was invalid: $version"
         return 1
     fi
 
@@ -110,7 +110,7 @@ downloadAndPackage() {
     echo -n "Checking to see whether the latest version has already been downloaded..."
     if alreadyDownloaded "${architecture}" "${latestAlarmVersion}"; then
         echo "Done."
-        echo "The latest version of phantomjs ($latestAlarmVersion) has already been downloaded."
+        echo "The latest version of phantomjs ($latestAlarmVersion) for the ${architecture} architecture has already been downloaded."
     else
         echo "Done."
         echo -n "Downloading latest version..."
