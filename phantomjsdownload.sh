@@ -80,7 +80,7 @@ download() {
 
     # Symbolically link the latest phantomjs version to the latest ALARM version
     local outputFileNoAlarmVersioning="phantomjs-${version}-linux-${architecture}.${outputArchiveExtension}"
-    ln -s ${downloadLocation}/${outputArchive} ${downloadLocation}/${outputFileNoAlarmVersioning}
+    ln -sf ${downloadLocation}/${outputArchive} ${downloadLocation}/${outputFileNoAlarmVersioning}
 
     rm -r $tmp
 }
