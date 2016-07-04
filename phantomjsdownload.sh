@@ -13,7 +13,7 @@ printLatestVersion() {
     echo "$(echo "$version" | grep -Eq "$versionRegex")"
     if [ -z "$version" ] || ! echo "$version" | grep -Eq "$versionRegex" ;then
         echo "The version number scraped from the ALARM mirror was invalid: $version"
-        exit 1
+        return 1
     fi
 
     echo $version
@@ -94,9 +94,16 @@ downloadAndPackage() {
     local architecture=$1
     local tmp=$2
 
+    # Get the latest version, ensuring that we check for errors
     echo -n "Finding the latest version of phantomjs available..."
+    latestAlarmVersionWithSpaces="$(printLatestVersion ${architecture})"
+    if [ $? != 0 ]; then
+        echo "${latestAlarmVersionWithSpaces}"
+        return 1
+    fi
+
     # tr -d removes all whitespace, in particular, this is used to remove the leading newline added by echo
-    latestAlarmVersion="$(printLatestVersion ${architecture} | tr -d '[[:space:]]')"
+    latestAlarmVersion="$(echo ${latestAlarmVersionWithSpaces} | tr -d '[[:space:]]')"
     echo "Done."
     echo "${latestAlarmVersion}"
 
