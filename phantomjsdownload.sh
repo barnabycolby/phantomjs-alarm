@@ -56,20 +56,18 @@ download() {
     # Download and extract the Arch Linux ARM package
     local pkgFilename="phantomjs-${alarmVersion}-${architecture}.pkg.tar.xz"
     wget "http://mirror.archlinuxarm.org/${architecture}/community/${pkgFilename}" -O ${tmp}/${pkgFilename}
-    tar xvJf ${tmp}/${pkgFilename} -C $alarmDirPath
 
     # Download and extract the bitbucket package (for the changelog and readme)
     bitbucketFilenameNoExtension="phantomjs-${version}-linux-x86_64"
     bitbucketFilename="${bitbucketFilenameNoExtension}.tar.bz2"
     wget "https://bitbucket.org/ariya/phantomjs/downloads/${bitbucketFilename}" -O ${tmp}/${bitbucketFilename}
-    tar xvjf ${tmp}/${bitbucketFilename} -C ${bitbucketDirPath}
 
-    # Construct the phantomjs output folder
-    cp -r ${alarmDirPath}/usr/bin ${outputDirPath}/
-    cp -r ${alarmDirPath}/usr/share/phantomjs/examples ${outputDirPath}/
-    cp -r ${alarmDirPath}/usr/share/licenses/phantomjs/* ${outputDirPath}/
-    cp ${bitbucketDirPath}/${bitbucketFilenameNoExtension}/README.md ${outputDirPath}/
-    cp ${bitbucketDirPath}/${bitbucketFilenameNoExtension}/ChangeLog ${outputDirPath}/
+    # Construct the phantomjs output folder by extracting the required components to the appropriate directory
+    tar xvJf ${tmp}/${pkgFilename} -C ${outputDirPath}/ usr/bin --strip-components=1
+    tar xvJf ${tmp}/${pkgFilename} -C ${outputDirPath}/ usr/share/phantomjs/examples --strip-components=3
+    tar xvJf ${tmp}/${pkgFilename} -C ${outputDirPath}/ usr/share/licenses/phantomjs --strip-components=4
+    tar xvjf ${tmp}/${bitbucketFilename} -C ${outputDirPath}/ ${bitbucketFilenameNoExtension}/README.md --strip-components=1
+    tar xvjf ${tmp}/${bitbucketFilename} -C ${outputDirPath}/ ${bitbucketFilenameNoExtension}/ChangeLog --strip-components=1
 
     # Compress the output folder
     local outputArchiveExtension="tar.bz2"
