@@ -72,7 +72,8 @@ download() {
     cp ${bitbucketDirPath}/${bitbucketFilenameNoExtension}/ChangeLog ${outputDirPath}/
 
     # Compress the output folder
-    local outputArchive="${outputDir}.tar.bz2"
+    local outputArchiveExtension="tar.bz2"
+    local outputArchive="${outputDir}.${outputArchiveExtension}"
     local outputFile="${tmp}/${outputArchive}"
     tar cvjf ${outputFile} --directory=${tmp} ${outputDir}
 
@@ -80,7 +81,7 @@ download() {
     mv ${outputFile} ${downloadLocation}
 
     # Symbolically link the latest phantomjs version to the latest ALARM version
-    local outputFileNoAlarmVersioning="phantomjs-${version}-linux-${architecture}"
+    local outputFileNoAlarmVersioning="phantomjs-${version}-linux-${architecture}.${outputArchiveExtension}"
     ln -s ${downloadLocation}/${outputArchive} ${downloadLocation}/${outputFileNoAlarmVersioning}
 
     rm -r $tmp
