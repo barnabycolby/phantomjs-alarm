@@ -39,16 +39,18 @@ alreadyDownloaded() {
 download() {
     local architecture=$1
     local alarmVersion=$2
+    local tmpRoot=$3
 
     # Strips the extra alarm versioning if it exists
     local version="$(echo ${latestAlarmVersion} | sed -e 's/-.*//')"
 
     # Create the required directories
-    local tmp="$(mktemp -d)"
+    local tmp="${tmpRoot}/${architecture}"
     local alarmDirPath="${tmp}/alarm"
     local outputDir="phantomjs-${version}-linux-${architecture}"
     local outputDirPath="${tmp}/${outputDir}"
     local bitbucketDirPath="${tmp}/bitbucket"
+    mkdir $tmp
     mkdir $alarmDirPath
     mkdir $outputDirPath
     mkdir $bitbucketDirPath
@@ -57,17 +59,20 @@ download() {
     local pkgFilename="phantomjs-${alarmVersion}-${architecture}.pkg.tar.xz"
     wget "http://mirror.archlinuxarm.org/${architecture}/community/${pkgFilename}" -O ${tmp}/${pkgFilename}
 
-    # Download and extract the bitbucket package (for the changelog and readme)
+    # Download and extract the bitbucket package (for the changelog and readme), if it is not already downloaded
     bitbucketFilenameNoExtension="phantomjs-${version}-linux-x86_64"
     bitbucketFilename="${bitbucketFilenameNoExtension}.tar.bz2"
-    wget "https://bitbucket.org/ariya/phantomjs/downloads/${bitbucketFilename}" -O ${tmp}/${bitbucketFilename}
+    bitbucketFilePath="${tmpRoot}/${bitbucketFilename}"
+    if [ ! -f ${bitbucketFilePath} ]; then
+        wget "https://bitbucket.org/ariya/phantomjs/downloads/${bitbucketFilename}" -O ${bitbucketFilePath}
+    fi
 
     # Construct the phantomjs output folder by extracting the required components to the appropriate directory
     tar xvJf ${tmp}/${pkgFilename} -C ${outputDirPath}/ usr/bin --strip-components=1
     tar xvJf ${tmp}/${pkgFilename} -C ${outputDirPath}/ usr/share/phantomjs/examples --strip-components=3
     tar xvJf ${tmp}/${pkgFilename} -C ${outputDirPath}/ usr/share/licenses/phantomjs --strip-components=4
-    tar xvjf ${tmp}/${bitbucketFilename} -C ${outputDirPath}/ ${bitbucketFilenameNoExtension}/README.md --strip-components=1
-    tar xvjf ${tmp}/${bitbucketFilename} -C ${outputDirPath}/ ${bitbucketFilenameNoExtension}/ChangeLog --strip-components=1
+    tar xvjf ${bitbucketFilePath} -C ${outputDirPath}/ ${bitbucketFilenameNoExtension}/README.md --strip-components=1
+    tar xvjf ${bitbucketFilePath} -C ${outputDirPath}/ ${bitbucketFilenameNoExtension}/ChangeLog --strip-components=1
 
     # Compress the output folder
     local outputArchiveExtension="tar.bz2"
@@ -81,14 +86,13 @@ download() {
     # Symbolically link the latest phantomjs version to the latest ALARM version
     local outputFileNoAlarmVersioning="${outputDir}.${outputArchiveExtension}"
     ln -sf ${downloadLocation}/${outputArchive} ${downloadLocation}/${outputFileNoAlarmVersioning}
-
-    rm -r $tmp
 }
 
 # If the latest version has not already been downloaded, it is downloaded and packaged for use
 # The architecture to download and package for should be given as the first argument (something like "armv7h")
 downloadAndPackage() {
     local architecture=$1
+    local tmp=$2
 
     echo -n "Finding the latest version of phantomjs available..."
     # tr -d removes all whitespace, in particular, this is used to remove the leading newline added by echo
@@ -103,13 +107,15 @@ downloadAndPackage() {
     else
         echo "Done."
         echo -n "Downloading latest version..."
-        download "${architecture}" "${latestAlarmVersion}"
+        download "${architecture}" "${latestAlarmVersion}" "${tmp}"
         echo "Done."
     fi
 }
 
+tmp="$(mktemp -d)"
 for architecture in "aarch64" "arm" "armv6h" "armv7h"; do
-    downloadAndPackage "${architecture}"
+    downloadAndPackage "${architecture}" "${tmp}"
 done
+rm -r $tmp
 
 exit 0
