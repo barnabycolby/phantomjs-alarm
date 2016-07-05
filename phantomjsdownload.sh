@@ -1,11 +1,17 @@
 #!/bin/bash
 
 # Exit immediately on error, printing a failure message containing the error code
-set -e
-trap 'echo "The script failed with error code ${?}."' EXIT
+set -o errexit
+set -o errtrace
+printErrorMessage() {
+    lineNumber=$1
+    errorCode=$2
+    echo "The script failed with error code ${errorCode} on line ${lineNumber}."
+}
+trap 'printErrorMessage ${LINENO} ${?}' ERR
 
 # Exit if the script tries to use an uninitialised variable (this usually indicates error)
-set -u
+set -o nounset
 
 # Should be the location of a folder without the trailing /
 downloadLocation='/data/dist/phantomjs'
@@ -144,5 +150,4 @@ done
 rm -r $tmp
 
 # Before exiting, we need to reset the EXIT trap to prevent a failure message from being printed
-trap - EXIT
 exit 0
