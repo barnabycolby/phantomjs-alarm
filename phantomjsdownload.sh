@@ -16,20 +16,24 @@ set -o nounset
 # Should be the location of a folder without the trailing /
 downloadLocation='/data/dist/phantomjs'
 
-# Prints the latest version of phantomjs available from archlinuxarm
-printLatestVersion() {
+# Scrapes the ALARM package page for the available versions of phantomjs and returns them as a list
+scrapePageForVersions() {
     local architecture=$1
-    local version=$(curl "http://mirror.archlinuxarm.org/${architecture}/community/" -L -s | grep "phantomjs-.*-${architecture}.pkg.tar.xz<" | sed -e 's/^.*<a href="phantomjs-//' | sed -e "s/-${architecture}.*$//")
+    local page="http://mirror.archlinuxarm.org/${architecture}/community/"
+    local versions=$(curl "${page}" -L -s | grep "phantomjs-.*-${architecture}.pkg.tar.xz<" | sed -e 's/^.*<a href="phantomjs-//' | sed -e "s/-${architecture}.*$//")
     
-    # Check that the version number is valid
-    versionRegex="^[0-9]+\.[0-9]+\.[0-9]+(\$|-[0-9]+)"
-    echo "$(echo "$version" | grep -Eq "$versionRegex")"
-    if [ -z "$version" ] || ! echo "$version" | grep -Eq "$versionRegex" ;then
-        echo "- The version number scraped from the ALARM ${architecture} mirror was invalid: $version"
-        return 1
-    fi
+    local sanitisedVersions=""
+    for version in $versions; do
+        # Check that the version number is valid
+        versionRegex="^[0-9]+\.[0-9]+\.[0-9]+(\$|-[0-9]+)"
 
-    echo $version
+        # Only add versions to the sanitised list if they match the regex
+        if [ -n "$version" ] && echo "$version" | grep -Eq "$versionRegex" ;then
+            sanitisedVersions+="${version} "
+        fi
+    done
+
+    echo "${sanitisedVersions}"
 }
 
 # Check to see whether we already have it archived
@@ -107,7 +111,7 @@ download() {
     echo "Done."
 
     # Symbolically link the latest phantomjs version to the latest ALARM version
-    if [ "${alarmVersion}" -ne "${version}" ]; then
+    if [ "${alarmVersion}" != "${version}" ]; then
         echo -n "- Creating symlink file without the extra Arch Linux ARM versioning..."
         local outputFileNoAlarmVersioning="${outputDir}.${outputArchiveExtension}"
         ln -sf ${downloadLocation}/${outputArchive} ${downloadLocation}/${outputFileNoAlarmVersioning}
@@ -120,20 +124,7 @@ download() {
 downloadAndPackage() {
     local architecture=$1
     local tmp=$2
-
-    echo "${architecture}"
-
-    # Get the latest version, ensuring that we check for errors
-    echo -n "- Finding the latest version of phantomjs available..."
-    latestAlarmVersionWithSpaces="$(printLatestVersion ${architecture})"
-    if [ $? != 0 ]; then
-        echo "${latestAlarmVersionWithSpaces}"
-        return 1
-    fi
-
-    # tr -d removes all whitespace, in particular, this is used to remove the leading newline added by echo
-    latestAlarmVersion="$(echo ${latestAlarmVersionWithSpaces} | tr -d '[[:space:]]')"
-    echo "Done."
+    local latestAlarmVersion=$3
 
     echo -n "- Checking to see whether the latest version has already been downloaded..."
     if alreadyDownloaded "${architecture}" "${latestAlarmVersion}"; then
@@ -147,7 +138,11 @@ downloadAndPackage() {
 
 tmp="$(mktemp -d)"
 for architecture in "aarch64" "arm" "armv6h" "armv7h"; do
-    downloadAndPackage "${architecture}" "${tmp}"
+    echo "${architecture}"
+
+    for version in $(scrapePageForVersions ${architecture}); do
+        downloadAndPackage "${architecture}" "${tmp}" "${version}"
+    done
 done
 rm -r $tmp
 
