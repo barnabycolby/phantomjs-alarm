@@ -107,10 +107,12 @@ download() {
     echo "Done."
 
     # Symbolically link the latest phantomjs version to the latest ALARM version
-    echo -n "- Creating symlink file without the extra Arch Linux ARM versioning..."
-    local outputFileNoAlarmVersioning="${outputDir}.${outputArchiveExtension}"
-    ln -sf ${downloadLocation}/${outputArchive} ${downloadLocation}/${outputFileNoAlarmVersioning}
-    echo "Done."
+    if [ "${alarmVersion}" -ne "${version}" ]; then
+        echo -n "- Creating symlink file without the extra Arch Linux ARM versioning..."
+        local outputFileNoAlarmVersioning="${outputDir}.${outputArchiveExtension}"
+        ln -sf ${downloadLocation}/${outputArchive} ${downloadLocation}/${outputFileNoAlarmVersioning}
+        echo "Done."
+    fi
 }
 
 # If the latest version has not already been downloaded, it is downloaded and packaged for use
