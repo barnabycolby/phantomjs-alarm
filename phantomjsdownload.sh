@@ -62,11 +62,11 @@ download() {
     local alarmDirPath="${tmp}/alarm"
     local outputDir="phantomjs-${version}-linux-${architecture}"
     local outputDirPath="${tmp}/${outputDir}"
-    local bitbucketDirPath="${tmp}/bitbucket"
+    local releaseFilesDirPath="${tmp}/releaseFiles"
     mkdir $tmp
     mkdir $alarmDirPath
     mkdir $outputDirPath
-    mkdir $bitbucketDirPath
+    mkdir $releaseFilesDirPath
 
     # Download and extract the Arch Linux ARM package
     local pkgFilename="phantomjs-${alarmVersion}-${architecture}.pkg.tar.xz"
@@ -74,13 +74,13 @@ download() {
     wget --quiet "http://mirror.archlinuxarm.org/${architecture}/community/${pkgFilename}" -O ${tmp}/${pkgFilename}
     echo "Done."
 
-    # Download and extract the bitbucket package (for the changelog and readme), if it is not already downloaded
-    bitbucketFilenameNoExtension="phantomjs-${version}-linux-x86_64"
-    bitbucketFilename="${bitbucketFilenameNoExtension}.tar.bz2"
-    bitbucketFilePath="${tmpRoot}/${bitbucketFilename}"
-    if [ ! -f ${bitbucketFilePath} ]; then
-        echo -n "- Downloading the official x86 package (for README and ChangeLog)..."
-        wget --quiet "https://bitbucket.org/ariya/phantomjs/downloads/${bitbucketFilename}" -O ${bitbucketFilePath}
+    # Download and extract the release files (for the changelog and readme), if it is not already downloaded
+    releaseFilesFilenameNoExtension="phantomjs-${version}"
+    releaseFilesFilename="${releaseFilesFilenameNoExtension}.tar.gz"
+    releaseFilesFilePath="${tmpRoot}/${releaseFilesFilename}"
+    if [ ! -f ${releaseFilesFilePath} ]; then
+        echo -n "- Downloading the official PhantomJS source release (for README and ChangeLog)..."
+        wget --quiet "https://github.com/ariya/phantomjs/archive/${version}.tar.gz" -O ${releaseFilesFilePath}
         echo "Done."
     fi
 
@@ -89,8 +89,8 @@ download() {
     tar xJf ${tmp}/${pkgFilename} -C ${outputDirPath}/ usr/bin --strip-components=1
     tar xJf ${tmp}/${pkgFilename} -C ${outputDirPath}/ usr/share/phantomjs/examples --strip-components=3
     tar xJf ${tmp}/${pkgFilename} -C ${outputDirPath}/ usr/share/licenses/phantomjs --strip-components=4
-    tar xjf ${bitbucketFilePath} -C ${outputDirPath}/ ${bitbucketFilenameNoExtension}/README.md --strip-components=1
-    tar xjf ${bitbucketFilePath} -C ${outputDirPath}/ ${bitbucketFilenameNoExtension}/ChangeLog --strip-components=1
+    tar xzf ${releaseFilesFilePath} -C ${outputDirPath}/ ${releaseFilesFilenameNoExtension}/README.md --strip-components=1
+    tar xzf ${releaseFilesFilePath} -C ${outputDirPath}/ ${releaseFilesFilenameNoExtension}/ChangeLog --strip-components=1
     echo "Done."
 
     # Compress the output folder
