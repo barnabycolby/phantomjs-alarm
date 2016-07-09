@@ -10,16 +10,19 @@ printErrorMessage() {
 }
 trap 'printErrorMessage ${LINENO} ${?}' ERR
 
-# Exit if the script tries to use an uninitialised variable (this usually indicates error)
-set -o nounset
-
 # Should be the location of a folder without the trailing /
 downloadLocation='/data/dist/phantomjs'
+
+# Optional parameter
+# The user can specify a custom URL to look for and download the arch packages from
+# The URL should not have a trailing slash!
+userSpecifiedPage=$1
 
 # Scrapes the ALARM package page for the available versions of phantomjs and returns them as a list
 scrapePageForVersions() {
     local architecture=$1
-    local page="http://mirror.archlinuxarm.org/${architecture}/community/"
+    local page=$2
+
     local versions=$(curl "${page}" -L -s | grep "phantomjs-.*-${architecture}.pkg.tar.xz<" | sed -e 's/^.*<a href="phantomjs-//' | sed -e "s/-${architecture}.*$//")
     
     local sanitisedVersions=""
@@ -57,12 +60,13 @@ download() {
     local architecture=$1
     local alarmVersion=$2
     local tmpRoot=$3
+    local page=$4
 
     # Strips the extra alarm versioning if it exists
     local version="$(echo ${latestAlarmVersion} | sed -e 's/-.*//')"
 
     # Create the required directories
-    local tmp="${tmpRoot}/${architecture}"
+    local tmp="${tmpRoot}/${architecture}-${alarmVersion}"
     local alarmDirPath="${tmp}/alarm"
     local outputDir="phantomjs-${version}-linux-${architecture}"
     local outputDirPath="${tmp}/${outputDir}"
@@ -75,7 +79,7 @@ download() {
     # Download and extract the Arch Linux ARM package
     local pkgFilename="phantomjs-${alarmVersion}-${architecture}.pkg.tar.xz"
     echo -n "- Downloading the Arch Linux ARM package..."
-    wget --quiet "http://mirror.archlinuxarm.org/${architecture}/community/${pkgFilename}" -O ${tmp}/${pkgFilename}
+    wget --quiet "${page}/${pkgFilename}" -O ${tmp}/${pkgFilename}
     echo "Done."
 
     # Download and extract the release files (for the changelog and readme), if it is not already downloaded
@@ -117,6 +121,9 @@ download() {
         ln -sf ${downloadLocation}/${outputArchive} ${downloadLocation}/${outputFileNoAlarmVersioning}
         echo "Done."
     fi
+
+    # Remove the tmp directory for this particular architecture/version combination to save space
+    rm -r ${tmp}
 }
 
 # If the latest version has not already been downloaded, it is downloaded and packaged for use
@@ -125,6 +132,7 @@ downloadAndPackage() {
     local architecture=$1
     local tmp=$2
     local latestAlarmVersion=$3
+    local page=$4
 
     echo -n "- Checking to see whether the latest version has already been downloaded..."
     if alreadyDownloaded "${architecture}" "${latestAlarmVersion}"; then
@@ -132,16 +140,22 @@ downloadAndPackage() {
         echo "- The latest version of phantomjs ($latestAlarmVersion) for the ${architecture} architecture has already been downloaded."
     else
         echo "Done."
-        download "${architecture}" "${latestAlarmVersion}" "${tmp}"
+        download "${architecture}" "${latestAlarmVersion}" "${tmp}" "${page}"
     fi
 }
 
 tmp="$(mktemp -d)"
 for architecture in "aarch64" "arm" "armv6h" "armv7h"; do
-    echo "${architecture}"
+    # The user may have specified the URL to search for and download arch packages from
+    if [ -z "${userSpecifiedPage}" ]; then
+        page="http://mirror.archlinuxarm.org/${architecture}/community"
+    else
+        page=${userSpecifiedPage}
+    fi
 
-    for version in $(scrapePageForVersions ${architecture}); do
-        downloadAndPackage "${architecture}" "${tmp}" "${version}"
+    for version in $(scrapePageForVersions ${architecture} ${page}); do
+        echo "${architecture} ${version}"
+        downloadAndPackage "${architecture}" "${tmp}" "${version}" "${page}"
     done
 done
 rm -r $tmp
