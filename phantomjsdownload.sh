@@ -15,8 +15,8 @@ downloadLocation='/data/dist/phantomjs'
 
 # Optional parameter
 # The user can specify a custom URL to look for and download the arch packages from
-# The URL should not have a trailing slash!
-userSpecifiedPage=$1
+# The %/ ensures that the URL does not have a trailing slash (required by the script)
+userSpecifiedPage=${1%/}
 
 # Scrapes the ALARM package page for the available versions of phantomjs and returns them as a list
 scrapePageForVersions() {
