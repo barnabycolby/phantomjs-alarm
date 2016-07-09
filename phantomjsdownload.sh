@@ -53,6 +53,36 @@ alreadyDownloaded() {
     fi
 }
 
+stripAlarmVersioning() {
+    local alarmVersion=$1
+    echo "$(echo ${alarmVersion} | sed -e 's/-.*//')"
+}
+
+# Given an alarm version number, returns 1 if it is the latest downloaded alarm subversion of the package and 0 otherwise
+isLatestVersion() {
+    local alarmVersion=$1
+    local architecture=$2
+    local version="$(stripAlarmVersioning ${alarmVersion})"
+
+    # Just the alarm version i.e. 2.1.1-3 -> 3
+    local alarmVersionToCheck="$(echo "$alarmVersion" | sed -e 's/.*-//g')"
+
+    local prefix="${downloadLocation}/phantomjs-${version}"
+    local suffix="linux-${architecture}.tar.bz2"
+    local escapedPrefix="$(echo "${prefix}" | sed -e 's/\//\\\//g')"
+    local escapedSuffix="$(echo "${suffix}" | sed -e 's/\./\\\./g')"
+    local filesWithSameArchitectureAndVersion="$(ls -1 ${prefix}-*-${suffix})"
+    for file in ${filesWithSameArchitectureAndVersion}; do
+        alarmVersionForFile="$(echo "$(echo ${file} | sed -e "s/${escapedPrefix}-//g" | sed -e "s/-${escapedSuffix}//g")")"
+        if (( alarmVersionForFile > alarmVersionToCheck )); then
+            return 1
+        fi
+    done
+
+    # If we reach this point then none of the version numbers were greater, therefore the version we are checking must be the latest
+    return 0
+}
+
 # The version to download from Arch Linux ARM should be passed as the first argument
 # The version to create should be passed as the second argument
 # Note that these values may differ if the Arch Linux ARM packages have been patched
@@ -62,8 +92,7 @@ download() {
     local tmpRoot=$3
     local page=$4
 
-    # Strips the extra alarm versioning if it exists
-    local version="$(echo ${latestAlarmVersion} | sed -e 's/-.*//')"
+    local version="$(stripAlarmVersioning ${alarmVersion})"
 
     # Create the required directories
     local tmp="${tmpRoot}/${architecture}-${alarmVersion}"
@@ -115,7 +144,7 @@ download() {
     echo "Done."
 
     # Symbolically link the latest phantomjs version to the latest ALARM version
-    if [ "${alarmVersion}" != "${version}" ]; then
+    if [ "${alarmVersion}" != "${version}" ] && isLatestVersion "${alarmVersion}" "${architecture}"; then
         echo -n "- Creating symlink file without the extra Arch Linux ARM versioning..."
         local outputFileNoAlarmVersioning="${outputDir}.${outputArchiveExtension}"
         ln -sf ${downloadLocation}/${outputArchive} ${downloadLocation}/${outputFileNoAlarmVersioning}
