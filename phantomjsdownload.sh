@@ -13,6 +13,18 @@ trap 'printErrorMessage ${LINENO} ${?}' ERR
 # Should be the location of a folder without the trailing /
 downloadLocation='/data/dist/phantomjs'
 
+# Checks whether a given string matches the expected pattern for PhantomJS versioning
+isValidVersionNumber() {
+    stringToCheck=$1
+    versionRegex="^[0-9]+\.[0-9]+\.[0-9]+(\$|-[0-9]+)"
+
+    if [ -n "${stringToCheck}" ] && echo "${stringToCheck}" | grep -Eq "${versionRegex}" ;then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Scrapes the ALARM package page for the available versions of phantomjs and returns them as a list
 scrapePageForVersions() {
     local architecture=$1
@@ -22,11 +34,8 @@ scrapePageForVersions() {
     
     local sanitisedVersions=""
     for version in $versions; do
-        # Check that the version number is valid
-        versionRegex="^[0-9]+\.[0-9]+\.[0-9]+(\$|-[0-9]+)"
-
-        # Only add versions to the sanitised list if they match the regex
-        if [ -n "$version" ] && echo "$version" | grep -Eq "$versionRegex" ;then
+        # Only add versions to the sanitised list if they are valid version numbers
+        if isValidVersionNumber "${version}"; then
             sanitisedVersions+="${version} "
         fi
     done
@@ -213,6 +222,18 @@ elif [ $# -eq 3 ]; then
     version=$2
     architecture=$3
 
+    # First, we must check that the path to the binary is an actual file
+    if [ ! -f ${pathToBinary} ]; then
+        echo "I can't find the PhantomJS binary, the given path should be accessible from the location that this script is run from."
+        exit 1
+    fi
+
+    # Then we must check that the given version number is valid
+    if ! isValidVersionNumber "${version}"; then
+        echo "The version number did not match the expected pattern. It should look something like '2.1.1' or '2.1.1-3'."
+        exit 1
+    fi
+
     echo "${architecture} ${version}"
 
     if ! alreadyDownloaded "${architecture}" "${version}"; then
@@ -231,5 +252,4 @@ fi
 
 rm -r $tmpRoot
 
-# Before exiting, we need to reset the EXIT trap to prevent a failure message from being printed
 exit 0
