@@ -10,10 +10,13 @@ printErrorMessage() {
 }
 trap 'printErrorMessage ${LINENO} ${?}' ERR
 
-# Should be the location of a folder without the trailing /
+# Once the PhantomJS binary has been packaged, the resulting archive will be placed in this location
 downloadLocation='/data/dist/phantomjs'
 
 # Checks whether a given string matches the expected pattern for PhantomJS versioning
+# For example, '2.1.1' and '2.1.1-3' returns true and 'beans' returns false
+#
+# $1 -> The string to check
 isValidVersionNumber() {
     stringToCheck=$1
     versionRegex="^[0-9]+\.[0-9]+\.[0-9]+(\$|-[0-9]+)"
@@ -25,16 +28,20 @@ isValidVersionNumber() {
     fi
 }
 
-# Scrapes the ALARM package page for the available versions of phantomjs and returns them as a list
+# Scrapes a given URL for available versions of PhantomJS arch packages, and returns the version numbers as a list
+# 
+# $1 -> The architecture to look for e.g. armv7h/aarch64/...
+# $2 -> The URL to scrape
 scrapePageForVersions() {
     local architecture=$1
     local page=$2
 
+    # Retrieves a list of version numbers
     local versions=$(curl "${page}" -L -s | grep "phantomjs-.*-${architecture}.pkg.tar.xz<" | sed -e 's/^.*<a href="phantomjs-//' | sed -e "s/-${architecture}.*$//")
     
+    # We sanitise the version numbers just to be safe
     local sanitisedVersions=""
     for version in $versions; do
-        # Only add versions to the sanitised list if they are valid version numbers
         if isValidVersionNumber "${version}"; then
             sanitisedVersions+="${version} "
         fi
@@ -43,8 +50,11 @@ scrapePageForVersions() {
     echo "${sanitisedVersions}"
 }
 
-# Check to see whether we already have it archived
-# Requires the version to check for as the first argument
+# Checks to see whether a specific architecture and version of PhantomJS has already been archived
+# Returns true if it has, false otherwise
+#
+# $1 -> architecture to check e.g. 'armv7h'/'aarch64'/...
+# $2 -> version number to check e.g. 2.1.1
 alreadyDownloaded() {
     local architecture=$1
     local version=$2
@@ -54,7 +64,7 @@ alreadyDownloaded() {
     local filename="${downloadLocation}/phantomjs-${version}-linux-${architecture}.tar.bz2"
     if [ -f $filename ]; then
         echo "Done."
-        echo "- The latest version of phantomjs ($latestAlarmVersion) for the ${architecture} architecture has already been downloaded."
+        echo "- The latest version of phantomjs ($version) for the ${architecture} architecture has already been downloaded."
         return 0
     else
         echo "Done."
@@ -62,18 +72,26 @@ alreadyDownloaded() {
     fi
 }
 
+# Strips the extra version numbers sometimes added by the Arch package system
+# i.e. 2.1.1-3 -> 2.1.1
+#
+# $1 -> The version number to strip
 stripAlarmVersioning() {
     local alarmVersion=$1
     echo "$(echo ${alarmVersion} | sed -e 's/-.*//')"
 }
 
-# Given an alarm version number, returns 1 if it is the latest downloaded alarm subversion of the package and 0 otherwise
+# The Arch packaging system adds extra version information on top of the PhantomJS official version numbers, for example 2.1.1 -> 2.1.1-3
+# Given the full Arch version number, this function returns true if it is later than the already archived packages with the SAME PhantomJS version# number, and false otherwise
+#
+# $1 -> The alarm version number to check
+# $2 -> The architecture of the packages to compare against
 isLatestVersion() {
     local alarmVersion=$1
     local architecture=$2
     local version="$(stripAlarmVersioning ${alarmVersion})"
 
-    # Just the alarm version i.e. 2.1.1-3 -> 3
+    # Strips the leading official PhantomJS version, leaving just the alarm version number i.e. 2.1.1-3 -> 3
     local alarmVersionToCheck="$(echo "$alarmVersion" | sed -e 's/.*-//g')"
 
     local prefix="${downloadLocation}/phantomjs-${version}"
@@ -82,6 +100,7 @@ isLatestVersion() {
     local escapedSuffix="$(echo "${suffix}" | sed -e 's/\./\\\./g')"
     local filesWithSameArchitectureAndVersion="$(ls -1 ${prefix}-*-${suffix})"
     for file in ${filesWithSameArchitectureAndVersion}; do
+        # Strips the leading official PhantomJS version, leaving just the alarm version number i.e. 2.1.1-3 -> 3
         alarmVersionForFile="$(echo "$(echo ${file} | sed -e "s/${escapedPrefix}-//g" | sed -e "s/-${escapedSuffix}//g")")"
         if (( alarmVersionForFile > alarmVersionToCheck )); then
             return 1
@@ -92,16 +111,21 @@ isLatestVersion() {
     return 0
 }
 
-# The version to download from Arch Linux ARM should be passed as the first argument
-# The version to create should be passed as the second argument
-# Note that these values may differ if the Arch Linux ARM packages have been patched
+# Downloads the specified arch package from the given web directory, packages it in the PhantomJS manner and places the resulting archive in the
+# appropriate place
+#
+# $1 -> The architecture of the package to retrieve e.g. 'armv7h'/'aarch64'
+# $2 -> The version number of the package to download
+# $3 -> The temporary directory to work in
+# $4 -> The web folder URL to download packages from, this must not have a trailing slash
 downloadAndPackage() {
     local architecture=$1
     local alarmVersion=$2
     local tmpRoot=$3
     local page=$4
 
-    # Create the tmp directory
+    # Create a new tmp directory inside the root tmp directory
+    # This prevents conflicts with other instances of this function
     local tmp="${tmpRoot}/${architecture}-${alarmVersion}"
     mkdir $tmp
 
@@ -116,10 +140,18 @@ downloadAndPackage() {
     # Package the binary
     package ${architecture} ${alarmVersion} ${tmpRoot} ${tmp} ${tmp}/phantomjs
 
-    # Remove the tmp directory for this particular architecture/version combination to save space
+    # Remove the tmp directory we created earlier, in order to use disk space more efficiently
     rm -r ${tmp}
 }
 
+# Packages a given PhantomJS binary in the same way as the official PhantomJS downloads are packaged, placing the resulting archive in the
+# specified download location
+#
+# $1 -> The target architecture of the binary
+# $2 -> The version number of the binary. This should be the full Arch version number where possible.
+# $3 -> The root temporary directory to work in
+# $4 -> The temporary directory for this particular architecture & version number combination
+# $5 -> The path of the PhantomJS binary
 package() {
     local architecture=$1
     local alarmVersion=$2
@@ -138,7 +170,9 @@ package() {
     mkdir $outputDirPath
     mkdir $releaseFilesDirPath
 
-    # Download and extract the release files (for the changelog and readme), if it is not already downloaded
+    # Download and extract the official PhantomJS release files (for the changelog, readme, licenses, examples etc.)
+    # If a binary with the same version but targeting a different architecture has already been downloaded, then this archive may already be
+    # present in the root temporary directory
     releaseFilesFilenameNoExtension="phantomjs-${version}"
     releaseFilesFilename="${releaseFilesFilenameNoExtension}.tar.gz"
     releaseFilesFilePath="${tmpRoot}/${releaseFilesFilename}"
@@ -172,7 +206,10 @@ package() {
     mv ${outputFile} ${downloadLocation}
     echo "Done."
 
-    # Symbolically link the latest phantomjs version to the latest ALARM version
+    # Most users will be looking for PhantomJS packages using the official PhantomJS versioning system, however, as this script archives each of
+    # the available Arch Linux versions, they may not find the version number exactly as expected. To solve this problem, we create a symbolic
+    # link using the official PhantomJS version number that points to the latest package using the Arch versioning system. Care is taken to
+    # ensure that the link is not overwritten if the package being processed is NOT the latest Arch version available in the download location.
     if [ "${alarmVersion}" != "${version}" ] && isLatestVersion "${alarmVersion}" "${architecture}"; then
         echo -n "- Creating symlink file without the extra Arch Linux ARM versioning..."
         local outputFileNoAlarmVersioning="${outputDir}.${outputArchiveExtension}"
@@ -181,16 +218,21 @@ package() {
     fi
 }
 
-# If the latest version has not already been downloaded, it is downloaded and packaged for use
-# The architecture to download and package for should be given as the first argument (something like "armv7h")
+# Downloads and packages the arch package with the specified architecture and version number, available from the given URL, ONLY IF it is not
+# already archived.
+#
+# $1 -> The architecture of the package to download.
+# $2 -> The version number of the package to download.
+# $3 -> The temporary directory to work in.
+# $4 -> The URL of the directory to download packages from.
 downloadAndPackageIfNotAlreadyArchived() {
     local architecture=$1
-    local tmp=$2
-    local latestAlarmVersion=$3
+    local version=$2
+    local tmp=$3
     local page=$4
 
-    if ! alreadyDownloaded "${architecture}" "${latestAlarmVersion}"; then
-        downloadAndPackage "${architecture}" "${latestAlarmVersion}" "${tmp}" "${page}"
+    if ! alreadyDownloaded "${architecture}" "${version}"; then
+        downloadAndPackage "${architecture}" "${version}" "${tmp}" "${page}"
     fi
 }
 
@@ -206,6 +248,7 @@ if [ $# -lt 2 ]; then
 
         # Decide which URL to use
         if [ -z "${userSpecifiedPage}" ]; then
+            # If the user did not specify a download URL, then we use the official Arch Linux ARM package mirror
             page="http://mirror.archlinuxarm.org/${architecture}/community"
         else
             page=${userSpecifiedPage}
@@ -213,16 +256,16 @@ if [ $# -lt 2 ]; then
 
         for version in $(scrapePageForVersions ${architecture} ${page}); do
             echo "${architecture} ${version}"
-            downloadAndPackageIfNotAlreadyArchived "${architecture}" "${tmpRoot}" "${version}" "${page}"
+            downloadAndPackageIfNotAlreadyArchived "${architecture}" "${version}" "${tmpRoot}" "${page}"
         done
     done
-# If given 3 arguments then we are to package a given binary from the command line
+# If given 3 arguments then we are to package a binary whose path is passed as the 1st argument
 elif [ $# -eq 3 ]; then
     pathToBinary=$1
     version=$2
     architecture=$3
 
-    # First, we must check that the path to the binary is an actual file
+    # First, we must check that the path to the binary points to a file that actually exists
     if [ ! -f ${pathToBinary} ]; then
         echo "I can't find the PhantomJS binary, the given path should be accessible from the location that this script is run from."
         exit 1
