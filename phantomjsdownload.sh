@@ -186,6 +186,8 @@ package() {
     echo -n "- Constructing the output directory by extracting the required components..."
     mkdir ${outputDirPath}/bin
     cp ${binaryLocation} ${outputDirPath}/bin/phantomjs
+    # We need to make sure that the binary is executable
+    chmod +x ${outputDirPath}/bin/phantomjs
     tar xzf ${releaseFilesFilePath} -C ${outputDirPath}/ ${releaseFilesFilenameNoExtension}/examples --strip-components=1
     tar xzf ${releaseFilesFilePath} -C ${outputDirPath}/ ${releaseFilesFilenameNoExtension}/third-party.txt --strip-components=1
     tar xzf ${releaseFilesFilePath} -C ${outputDirPath}/ ${releaseFilesFilenameNoExtension}/LICENSE.BSD --strip-components=1
