@@ -40,10 +40,15 @@ alreadyDownloaded() {
     local architecture=$1
     local version=$2
 
+    echo -n "- Checking to see whether the latest version has already been downloaded..."
+
     local filename="${downloadLocation}/phantomjs-${version}-linux-${architecture}.tar.bz2"
     if [ -f $filename ]; then
+        echo "Done."
+        echo "- The latest version of phantomjs ($latestAlarmVersion) for the ${architecture} architecture has already been downloaded."
         return 0
     else
+        echo "Done."
         return 1
     fi
 }
@@ -100,7 +105,7 @@ downloadAndPackage() {
     echo "Done."
 
     # Package the binary
-    package ${architecture} ${alarmVersion} ${tmpRoot} ${tmp} ${page} ${tmp}/phantomjs
+    package ${architecture} ${alarmVersion} ${tmpRoot} ${tmp} ${tmp}/phantomjs
 
     # Remove the tmp directory for this particular architecture/version combination to save space
     rm -r ${tmp}
@@ -111,8 +116,7 @@ package() {
     local alarmVersion=$2
     local tmpRoot=$3
     local tmp=$4
-    local page=$5
-    local binaryLocation=$6
+    local binaryLocation=$5
 
     local version="$(stripAlarmVersioning ${alarmVersion})"
 
@@ -176,31 +180,56 @@ downloadAndPackageIfNotAlreadyArchived() {
     local latestAlarmVersion=$3
     local page=$4
 
-    echo -n "- Checking to see whether the latest version has already been downloaded..."
-    if alreadyDownloaded "${architecture}" "${latestAlarmVersion}"; then
-        echo "Done."
-        echo "- The latest version of phantomjs ($latestAlarmVersion) for the ${architecture} architecture has already been downloaded."
-    else
-        echo "Done."
+    if ! alreadyDownloaded "${architecture}" "${latestAlarmVersion}"; then
         downloadAndPackage "${architecture}" "${latestAlarmVersion}" "${tmp}" "${page}"
     fi
 }
 
-tmp="$(mktemp -d)"
-for architecture in "aarch64" "arm" "armv6h" "armv7h"; do
-    # The user may have specified the URL to search for and download arch packages from
-    if [ -z "${userSpecifiedPage}" ]; then
-        page="http://mirror.archlinuxarm.org/${architecture}/community"
-    else
-        page=${userSpecifiedPage}
-    fi
+# Make tmp directory to perform work in
+tmpRoot="$(mktemp -d)"
 
-    for version in $(scrapePageForVersions ${architecture} ${page}); do
-        echo "${architecture} ${version}"
-        downloadAndPackageIfNotAlreadyArchived "${architecture}" "${tmp}" "${version}" "${page}"
+# If 0 or 1 arguments were given then we are to scrape a URL for all available downloads and package them
+if [ $# -lt 2 ]; then
+    for architecture in "aarch64" "arm" "armv6h" "armv7h"; do
+        # The user can specify a custom URL to look for and download the arch packages from
+        # The %/ ensures that the URL does not have a trailing slash (required by the script)
+        userSpecifiedPage=${1%/}
+
+        # Decide which URL to use
+        if [ -z "${userSpecifiedPage}" ]; then
+            page="http://mirror.archlinuxarm.org/${architecture}/community"
+        else
+            page=${userSpecifiedPage}
+        fi
+
+        for version in $(scrapePageForVersions ${architecture} ${page}); do
+            echo "${architecture} ${version}"
+            downloadAndPackageIfNotAlreadyArchived "${architecture}" "${tmpRoot}" "${version}" "${page}"
+        done
     done
-done
-rm -r $tmp
+# If given 3 arguments then we are to package a given binary from the command line
+elif [ $# -eq 3 ]; then
+    pathToBinary=$1
+    version=$2
+    architecture=$3
+
+    echo "${architecture} ${version}"
+
+    if ! alreadyDownloaded "${architecture}" "${version}"; then
+        # Create the tmp directory
+        tmp="${tmpRoot}/${architecture}-${alarmVersion}"
+        mkdir $tmp
+
+        # Package the binary
+        package ${architecture} ${version} ${tmpRoot} ${tmp} ${pathToBinary}
+
+        rm -r $tmp
+    fi
+else
+    echo "I don't know what to do with that many arguments! Please read the README at https://github.com/barnabycolby/phantomjs-alarm"
+fi
+
+rm -r $tmpRoot
 
 # Before exiting, we need to reset the EXIT trap to prevent a failure message from being printed
 exit 0
