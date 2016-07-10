@@ -13,11 +13,6 @@ trap 'printErrorMessage ${LINENO} ${?}' ERR
 # Should be the location of a folder without the trailing /
 downloadLocation='/data/dist/phantomjs'
 
-# Optional parameter
-# The user can specify a custom URL to look for and download the arch packages from
-# The %/ ensures that the URL does not have a trailing slash (required by the script)
-userSpecifiedPage=${1%/}
-
 # Scrapes the ALARM package page for the available versions of phantomjs and returns them as a list
 scrapePageForVersions() {
     local architecture=$1
@@ -86,46 +81,67 @@ isLatestVersion() {
 # The version to download from Arch Linux ARM should be passed as the first argument
 # The version to create should be passed as the second argument
 # Note that these values may differ if the Arch Linux ARM packages have been patched
-download() {
+downloadAndPackage() {
     local architecture=$1
     local alarmVersion=$2
     local tmpRoot=$3
     local page=$4
 
+    # Create the tmp directory
+    local tmp="${tmpRoot}/${architecture}-${alarmVersion}"
+    mkdir $tmp
+
+    # Download and extract the Arch Linux ARM package
+    local pkgFilename="phantomjs-${alarmVersion}-${architecture}.pkg.tar.xz"
+    local archiveDownloadLocation=${tmp}/${pkgFilename}
+    echo -n "- Downloading the Arch Linux ARM package..."
+    wget --quiet "${page}/${pkgFilename}" -O ${archiveDownloadLocation}
+    tar xJf ${archiveDownloadLocation} -C ${tmp} usr/bin/phantomjs --strip-components=2
+    echo "Done."
+
+    # Package the binary
+    package ${architecture} ${alarmVersion} ${tmpRoot} ${tmp} ${page} ${tmp}/phantomjs
+
+    # Remove the tmp directory for this particular architecture/version combination to save space
+    rm -r ${tmp}
+}
+
+package() {
+    local architecture=$1
+    local alarmVersion=$2
+    local tmpRoot=$3
+    local tmp=$4
+    local page=$5
+    local binaryLocation=$6
+
     local version="$(stripAlarmVersioning ${alarmVersion})"
 
     # Create the required directories
-    local tmp="${tmpRoot}/${architecture}-${alarmVersion}"
     local alarmDirPath="${tmp}/alarm"
     local outputDir="phantomjs-${version}-linux-${architecture}"
     local outputDirPath="${tmp}/${outputDir}"
     local releaseFilesDirPath="${tmp}/releaseFiles"
-    mkdir $tmp
     mkdir $alarmDirPath
     mkdir $outputDirPath
     mkdir $releaseFilesDirPath
-
-    # Download and extract the Arch Linux ARM package
-    local pkgFilename="phantomjs-${alarmVersion}-${architecture}.pkg.tar.xz"
-    echo -n "- Downloading the Arch Linux ARM package..."
-    wget --quiet "${page}/${pkgFilename}" -O ${tmp}/${pkgFilename}
-    echo "Done."
 
     # Download and extract the release files (for the changelog and readme), if it is not already downloaded
     releaseFilesFilenameNoExtension="phantomjs-${version}"
     releaseFilesFilename="${releaseFilesFilenameNoExtension}.tar.gz"
     releaseFilesFilePath="${tmpRoot}/${releaseFilesFilename}"
     if [ ! -f ${releaseFilesFilePath} ]; then
-        echo -n "- Downloading the official PhantomJS source release (for README and ChangeLog)..."
+        echo -n "- Downloading the official PhantomJS source release (for README, ChangeLog, licenses and examples)..."
         wget --quiet "https://github.com/ariya/phantomjs/archive/${version}.tar.gz" -O ${releaseFilesFilePath}
         echo "Done."
     fi
 
     # Construct the phantomjs output folder by extracting the required components to the appropriate directory
     echo -n "- Constructing the output directory by extracting the required components..."
-    tar xJf ${tmp}/${pkgFilename} -C ${outputDirPath}/ usr/bin --strip-components=1
-    tar xJf ${tmp}/${pkgFilename} -C ${outputDirPath}/ usr/share/phantomjs/examples --strip-components=3
-    tar xJf ${tmp}/${pkgFilename} -C ${outputDirPath}/ usr/share/licenses/phantomjs --strip-components=4
+    mkdir ${outputDirPath}/bin
+    cp ${binaryLocation} ${outputDirPath}/bin/phantomjs
+    tar xzf ${releaseFilesFilePath} -C ${outputDirPath}/ ${releaseFilesFilenameNoExtension}/examples --strip-components=1
+    tar xzf ${releaseFilesFilePath} -C ${outputDirPath}/ ${releaseFilesFilenameNoExtension}/third-party.txt --strip-components=1
+    tar xzf ${releaseFilesFilePath} -C ${outputDirPath}/ ${releaseFilesFilenameNoExtension}/LICENSE.BSD --strip-components=1
     tar xzf ${releaseFilesFilePath} -C ${outputDirPath}/ ${releaseFilesFilenameNoExtension}/README.md --strip-components=1
     tar xzf ${releaseFilesFilePath} -C ${outputDirPath}/ ${releaseFilesFilenameNoExtension}/ChangeLog --strip-components=1
     echo "Done."
@@ -150,14 +166,11 @@ download() {
         ln -sf ${downloadLocation}/${outputArchive} ${downloadLocation}/${outputFileNoAlarmVersioning}
         echo "Done."
     fi
-
-    # Remove the tmp directory for this particular architecture/version combination to save space
-    rm -r ${tmp}
 }
 
 # If the latest version has not already been downloaded, it is downloaded and packaged for use
 # The architecture to download and package for should be given as the first argument (something like "armv7h")
-downloadAndPackage() {
+downloadAndPackageIfNotAlreadyArchived() {
     local architecture=$1
     local tmp=$2
     local latestAlarmVersion=$3
@@ -169,7 +182,7 @@ downloadAndPackage() {
         echo "- The latest version of phantomjs ($latestAlarmVersion) for the ${architecture} architecture has already been downloaded."
     else
         echo "Done."
-        download "${architecture}" "${latestAlarmVersion}" "${tmp}" "${page}"
+        downloadAndPackage "${architecture}" "${latestAlarmVersion}" "${tmp}" "${page}"
     fi
 }
 
@@ -184,7 +197,7 @@ for architecture in "aarch64" "arm" "armv6h" "armv7h"; do
 
     for version in $(scrapePageForVersions ${architecture} ${page}); do
         echo "${architecture} ${version}"
-        downloadAndPackage "${architecture}" "${tmp}" "${version}" "${page}"
+        downloadAndPackageIfNotAlreadyArchived "${architecture}" "${tmp}" "${version}" "${page}"
     done
 done
 rm -r $tmp
